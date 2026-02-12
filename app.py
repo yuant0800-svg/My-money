@@ -46,11 +46,4 @@ config = {
 }
 
 # 使用新版本的初始化方式
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days']
-)
-
-        
+https://github.com/yuant0800-svg/My-money/blob/main/app.py
