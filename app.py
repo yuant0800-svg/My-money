@@ -4,110 +4,135 @@ import plotly.express as px
 from datetime import datetime
 import os
 
-# --- 1. 强效防御逻辑：如果数据坏了，自动重置 ---
-def load_and_fix_data(file_path):
-    cols = ["日期", "类型", "分类", "金额", "备注"]
-    if not os.path.exists(file_path):
-        return pd.DataFrame(columns=cols)
-    try:
-        df = pd.read_csv(file_path)
-        # 核心检查：如果缺少关键列，直接舍弃旧数据，防止 KeyError
-        if "日期" not in df.columns or "金额" not in df.columns:
-            return pd.DataFrame(columns=cols)
-        df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
-        return df.dropna(subset=['日期'])
-    except:
-        return pd.DataFrame(columns=cols)
+# --- 1. 网页页面设计 (CSS 注入) ---
+# 这部分就是你刚才问的“装修”代码，我把它放在了最开头
+st.set_page_config(page_title="Money+ 梦幻账本", layout="wide")
 
-# --- 2. 页面配置 (复刻 Money+ 樱花粉) ---
-st.set_page_config(page_title="Money+ Pro", layout="wide")
 st.markdown("""
     <style>
-    .stApp { background-color: #FFF5F7; }
-    [data-testid="stMetric"] { background-color: white; border-radius: 15px; border: 2px solid #FFC1CC; padding: 15px; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #FFC1CC; border-radius: 10px; padding: 5px; }
-    .stTabs [data-baseweb="tab"] { color: white; font-weight: bold; }
+    /* 全局背景色：柔和奶白粉 */
+    .stApp {
+        background-color: #FFF9FA;
+    }
+    /* 顶部指标卡片：白色圆角+粉色阴影 */
+    div[data-testid="stMetric"] {
+        background-color: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 16px rgba(255, 182, 193, 0.15);
+        padding: 20px;
+        border: 1px solid #FFE4E8;
+    }
+    /* 按钮：樱花粉圆角 */
+    .stButton>button {
+        border-radius: 25px;
+        background-color: #FF6B8B;
+        color: white;
+        border: none;
+        height: 3em;
+        width: 100%;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #FF8EAA;
+        transform: scale(1.02);
+    }
+    /* 标签页导航栏样式 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: white;
+        border-radius: 10px 10px 0 0;
+        padding: 10px 20px;
+        color: #FF6B8B;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. 简单的登录系统 ---
+# --- 2. 账号系统 ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
-    st.title("💖 Money+ 欢迎回来")
-    u = st.text_input("账号", value="admin")
+    st.title("🍭 Money+ 登录")
+    u = st.text_input("用户名", value="admin")
     p = st.text_input("密码", type="password")
-    if st.button("进入梦幻账本", use_container_width=True):
-        if u == "admin" and p == "password123":
-            st.session_state.auth = True; st.rerun()
+    if st.button("开启梦幻账本"):
+        if (u == "admin" and p == "password123") or (u == "user1" and p == "guest"):
+            st.session_state.auth = True
+            st.session_state.user = u
+            st.rerun()
     st.stop()
 
-# --- 4. 数据初始化 (使用新文件名规避旧数据) ---
-DATA_FILE = "money_v6_data.csv" 
-df = load_and_fix_data(DATA_FILE)
+# --- 3. 稳健数据加载 ---
+USER_FILE = f"money_v7_{st.session_state.user}.csv"
+COLS = ["日期", "类型", "分类", "金额", "备注"]
 
-# --- 5. 核心功能区 (复刻截图中的 Tabs) ---
-tab_list, tab_chart, tab_asset = st.tabs(["📝 记账明细", "📊 图表分析", "📈 资产趋势"])
+def load_data():
+    if not os.path.exists(USER_FILE): return pd.DataFrame(columns=COLS)
+    try:
+        df = pd.read_csv(USER_FILE)
+        df['日期'] = pd.to_datetime(df['日期'])
+        return df
+    except: return pd.DataFrame(columns=COLS)
 
-with tab_list:
-    # 顶部数据卡片
-    now = datetime.now()
-    if not df.empty:
-        # 使用更稳健的过滤，不直接用 .dt 访问，防止 AttributeError
-        this_month_df = df[df['日期'].map(lambda x: x.month == now.month and x.year == now.year)]
-        income = this_month_df[this_month_df['类型'] == "收入"]['金额'].sum()
-        expense = this_month_df[this_month_df['类型'] == "支出"]['金额'].sum()
-    else:
-        income, expense = 0.0, 0.0
+df = load_data()
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("总资产", f"￥{income - expense:,.2f}")
-    c2.metric("本月收入", f"￥{income:,.2f}")
-    c3.metric("本月支出", f"￥{expense:,.2f}")
+# --- 4. 页面布局 (复刻 App 看板) ---
+st.title("💖 我的资产看板")
 
-    st.divider()
+# 顶部三张精美卡片
+c1, c2, c3 = st.columns(3)
+now = datetime.now()
+month_df = df[df['日期'].map(lambda x: x.month == now.month and x.year == now.year)] if not df.empty else df
+inc = month_df[month_df['类型'] == "收入"]['金额'].sum()
+exp = month_df[month_df['类型'] == "支出"]['金额'].sum()
 
-    # 快捷记账表单
-    with st.expander("➕ 记一笔 (复刻分类图标)"):
-        with st.form("add_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            t_type = col1.radio("方向", ["支出", "收入"], horizontal=True)
-            t_date = col2.date_input("日期", now)
-            
-            # 复刻截图中的可爱分类
-            cats = ["🍱 餐饮", "🚗 交通", "🛍️ 购物", "🎮 娱乐", "🏠 居家", "🏥 医疗", "💰 工资", "🎁 礼物"]
-            t_cat = st.selectbox("分类选择", cats)
-            t_amt = st.number_input("金额", min_value=0.0)
-            t_note = st.text_input("备注 (选填)")
-            
-            if st.form_submit_button("保存账单", use_container_width=True):
-                new_row = pd.DataFrame([[pd.to_datetime(t_date), t_type, t_cat, t_amt, t_note]], columns=df.columns)
+c1.metric("总结余", f"￥{inc - exp:,.2f}")
+c2.metric("本月收入", f"￥{inc:,.2f}")
+c3.metric("本月支出", f"￥{exp:,.2f}")
+
+st.write("---")
+
+# 模拟 App 底部导航
+tab1, tab2, tab3 = st.tabs(["📝 记账", "📊 分析", "📈 趋势"])
+
+with tab1:
+    col_l, col_r = st.columns([1, 2])
+    with col_l:
+        st.subheader("➕ 快速记账")
+        with st.form("my_form", clear_on_submit=True):
+            t_type = st.radio("账单类型", ["支出", "收入"], horizontal=True)
+            t_amt = st.number_input("金额", min_value=0.0, step=10.0)
+            # 这里的 Emoji 分类就是画龙点睛之笔
+            t_cat = st.selectbox("分类", ["🍱 餐饮", "🛍️ 购物", "🚗 交通", "🎮 娱乐", "🏠 居家", "🏥 医疗", "💰 工资", "🎁 礼物"])
+            t_date = st.date_input("日期", now)
+            t_note = st.text_input("备注")
+            if st.form_submit_button("保存账单"):
+                new_row = pd.DataFrame([[pd.to_datetime(t_date), t_type, t_cat, t_amt, t_note]], columns=COLS)
                 df = pd.concat([df, new_row], ignore_index=True)
-                df.to_csv(DATA_FILE, index=False)
-                st.toast("入账成功！💖")
+                df.to_csv(USER_FILE, index=False)
                 st.rerun()
-
-    # 历史列表
-    st.subheader("🗓️ 历史账单")
-    if not df.empty:
+    
+    with col_r:
+        st.subheader("🗓️ 历史明细")
         st.dataframe(df.sort_values("日期", ascending=False), use_container_width=True, hide_index=True)
-    else:
-        st.info("还没有账单，点击上方“记一笔”开始吧！")
 
-with tab_chart:
-    st.subheader("🍩 支出构成分析")
+with tab2:
+    st.subheader("🍩 消费构成 (支出)")
     exp_df = df[df['类型'] == "支出"]
     if not exp_df.empty:
-        fig = px.pie(exp_df, values='金额', names='分类', hole=0.6, 
+        # 使用 Plotly 制作空心圆环图
+        fig = px.pie(exp_df, values='金额', names='分类', hole=0.6,
                      color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), paper_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("暂无分析数据")
+        st.info("还没有支出数据记录记录哦~")
 
-with tab_asset:
-    st.subheader("📈 净资产增长趋势")
+with tab3:
+    st.subheader("📈 资产增长曲线")
     if not df.empty:
-        trend = df.sort_values("日期").copy()
-        trend['val'] = trend.apply(lambda x: x['金额'] if x['类型'] == "收入" else -x['金额'], axis=1)
-        trend['balance'] = trend['val'].cumsum()
-        st.line_chart(trend.set_index("日期")['balance'], color="#FF6B8B")
-      
+        df_t = df.sort_values("日期").copy()
+        df_t['val'] = df_t.apply(lambda x: x['金额'] if x['类型'] == "收入" else -x['金额'], axis=1)
+        df_t['balance'] = df_t['val'].cumsum()
+        st.line_chart(df_t.set_index("日期")['balance'], color="#FF6B8B")
